@@ -21,10 +21,11 @@
       "properties": {"Node name for S&R": "MiniMaxH3PlanV2ProjectSetup"},
       "widgets_values": [
         "A single coherent cinematic scene with clear physical action and a resolved ending.",
-        6.0,
+        158,
         "cinematic, live-action",
         "Coherent ambience and synchronized physical sounds.",
-        "N/A"
+        "N/A",
+        24
       ]
     },
     {
@@ -107,7 +108,8 @@
     "linearData": {
       "inputs": [
         [1, "initial_prompt"],
-        [1, "duration_seconds"],
+        [1, "frame_count"],
+        [1, "fps"],
         [1, "visual_style"],
         [1, "overall_soundscape"],
         [1, "non_diegetic_music"],

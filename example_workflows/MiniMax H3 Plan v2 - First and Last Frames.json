@@ -21,10 +21,11 @@
       "properties": {"Node name for S&R": "MiniMaxH3PlanV2ProjectSetup"},
       "widgets_values": [
         "Create a smooth, coherent transition between the supplied opening and ending frames.",
-        6.0,
+        158,
         "cinematic, live-action",
         "Coherent ambience and synchronized physical sounds.",
-        "N/A"
+        "N/A",
+        24
       ]
     },
     {

@@ -45,6 +45,12 @@ cross-cut events receive `<scenetrans>` in both dialogue parts; a final
 interrupted event receives `<cutoff>`. Complete dialogue keeps the user's
 punctuation exactly as entered and never moves it outside its `<d>` tag.
 
+Project Setup selects the target by native **frame count**, not an arbitrary
+decimal duration. Its integer control advances only through the H3 `17k+5`
+grid (`107, 124, ... 345, 362`), while the fixed `fps` field exposes the native
+24 FPS rate. The node badge and preview derive the exact playback duration as
+`frame_count / fps`, including the explicit 362-frame / 15.083-second endpoint.
+
 The three media nodes require an exact relationship:
 
 - Image Reference distinguishes reusable visible content, exact first/last

@@ -16,10 +16,11 @@
       "properties": {"Node name for S&R": "MiniMaxH3PlanV2ProjectSetup"},
       "widgets_values": [
         "Generate a realistic production-Foley track synchronized to the locked source video. Use the supplied audio only as sound-texture guidance. No dialogue and no music.",
-        6.0,
+        158,
         "preserve the source picture track exactly",
         "Low continuous indoor room tone beneath synchronized footsteps, cloth movement, and object contacts.",
-        "N/A"
+        "N/A",
+        24
       ]
     },
     {

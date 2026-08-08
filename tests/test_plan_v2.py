@@ -554,7 +554,7 @@ def test_project_and_text_only_compile_to_native_t2va():
     prompt, rewrite, report, compiled, merged_length = compile_h3_plan(plan)
 
     assert h3_length == merged_length == 158
-    assert "native 158 frames" in preview
+    assert "158 native frames at 24 FPS" in preview
     assert prompt.startswith("integrated_multimodal_description: [Shot 1]")
     assert "overall_soundscape: Soft wind and footsteps." in prompt
     assert "subject_definitions:" not in prompt
@@ -564,6 +564,69 @@ def test_project_and_text_only_compile_to_native_t2va():
     assert compiled["compiled"]["mode"] == "T2VA"
     assert compiled["compiled"]["checkpoint"] == "H3-Base-FL2VA"
     assert "Do not add, remove, rename, or renumber" in rewrite
+
+
+def test_project_setup_exposes_native_frame_selector_and_fixed_fps():
+    required = MiniMaxH3PlanV2ProjectSetup.INPUT_TYPES()["required"]
+    frame_count = required["frame_count"]
+    fps = required["fps"]
+
+    assert frame_count[0] == "INT"
+    assert frame_count[1] == {
+        "default": 158,
+        "min": 107,
+        "max": 362,
+        "step": 17,
+        "tooltip": (
+            "Authoritative native 17k+5 frame count. The badge and preview display "
+            "its duration at the fixed Project FPS."
+        ),
+    }
+    assert fps[0] == "INT"
+    assert fps[1]["default"] == fps[1]["min"] == fps[1]["max"] == 24
+
+    plan, h3_length, preview = MiniMaxH3PlanV2ProjectSetup().start(
+        "A fox walks across fresh snow.",
+        345,
+        "cinematic",
+        "",
+        "N/A",
+        24,
+    )
+    assert h3_length == 345
+    assert plan["project"]["duration_seconds"] == pytest.approx(14.375)
+    assert plan["project"]["fps"] == 24
+    assert "14.375s · 345 native frames at 24 FPS" in preview
+
+
+def test_project_setup_migrates_legacy_seconds_and_rejects_invalid_frames():
+    plan, h3_length, _preview = MiniMaxH3PlanV2ProjectSetup().start(
+        "A legacy workflow.",
+        5.99,
+        "cinematic",
+        "",
+        "N/A",
+    )
+    assert h3_length == 158
+    assert plan["project"]["duration_seconds"] == pytest.approx(158 / 24)
+
+    with pytest.raises(ValueError, match="native 17k\\+5 value"):
+        MiniMaxH3PlanV2ProjectSetup().start(
+            "An invalid frame selection.",
+            159,
+            "cinematic",
+            "",
+            "N/A",
+        )
+    with pytest.raises(ValueError, match="native H3 rate of 24"):
+        MiniMaxH3PlanV2ProjectSetup().start(
+            "An invalid FPS selection.",
+            158,
+            "cinematic",
+            "",
+            "N/A",
+            30,
+        )
 
 
 def test_plan_v2_accepts_pre_replacement_payloads_as_empty_mappings():

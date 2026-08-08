@@ -21,10 +21,11 @@
       "properties": {"Node name for S&R": "MiniMaxH3PlanV2ProjectSetup"},
       "widgets_values": [
         "A woman speaks naturally in a coherent cinematic scene.",
-        6.0,
+        158,
         "cinematic, live-action",
         "Coherent ambience and synchronized physical sounds.",
-        "N/A"
+        "N/A",
+        24
       ]
     },
     {

@@ -22,10 +22,11 @@
       "properties": {"Node name for S&R": "MiniMaxH3PlanV2ProjectSetup"},
       "widgets_values": [
         "First recreate the supplied source video's timeline while replacing only the selected performer with the supplied reference character from the first source-derived frame. At the source endpoint, continue that already-edited scene and replacement character naturally forward. The character picture supplies identity and appearance only; never animate it or use it as an opening frame, composition, or separate shot.",
-        15.0,
+        362,
         "cinematic, live-action matching the source video",
         "Keep the source-derived portion's ambience and physical sounds synchronized, then develop them forward after the source endpoint without an audio restart or loop.",
-        "If audience-only music is present in the source soundtrack, maintain its progression through the source-derived portion and continue it forward after the endpoint without restarting or looping it; otherwise N/A."
+        "If audience-only music is present in the source soundtrack, maintain its progression through the source-derived portion and continue it forward after the endpoint without restarting or looping it; otherwise N/A.",
+        24
       ]
     },
     {

@@ -47,10 +47,11 @@
       },
       "widgets_values": [
         "Animate the supplied opening keyframe as one continuous shot. The opening keyframe controls the initial composition, pose, subject placement, wardrobe, environment, lighting, and camera. The character reference defines the character's stable identity and appearance. The motion clip supplies only motion progression, body mechanics, cadence, and action timing. Retarget that motion to the referenced character beginning smoothly from the keyframe pose. Do not copy the motion clip's identity, wardrobe, setting, lighting, camera, framing, or audio. Avoid a pose snap, duplicated action, or cut at the start.",
-        6.0,
+        158,
         "cinematic, live-action matching the opening keyframe",
         "Natural synchronized room tone and physical sounds matching the visible action.",
-        "N/A"
+        "N/A",
+        24
       ]
     },
     {

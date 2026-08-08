@@ -20,10 +20,11 @@
       "properties": {"Node name for S&R": "MiniMaxH3PlanV2ProjectSetup"},
       "widgets_values": [
         "A five-shot cinematic sequence follows the same referenced woman through one continuous scene. Each Shot uses its own supplied keyframe composition; Shot 3 also transfers the supplied movement to the woman.",
-        10.0,
+        243,
         "cinematic, live-action",
         "Continuous location ambience with synchronized movement sounds.",
-        "N/A"
+        "N/A",
+        24
       ]
     },
     {

@@ -22,6 +22,10 @@ SHOT_HANDLE_TYPE = "MINIMAX_H3_SHOT_HANDLE_V2"
 H3_FPS = 24
 H3_FRAME_MODULUS = 17
 H3_FRAME_OFFSET = 5
+H3_MIN_DURATION_SECONDS = 4.0
+H3_MAX_NATIVE_FRAMES = 362
+H3_MAX_NATIVE_DURATION_SECONDS = H3_MAX_NATIVE_FRAMES / H3_FPS
+H3_MIN_NATIVE_FRAMES = 107
 
 PHASE_SETUP = "setup"
 PHASE_TIMELINE = "timeline"
@@ -220,10 +224,53 @@ def native_frame_count(duration_seconds: float) -> int:
     """Round a duration upward to the native H3 17k+5 frame grid."""
 
     duration = float(duration_seconds)
-    if not math.isfinite(duration) or duration < 4.0 or duration > 15.0:
-        raise ValueError("H3 target duration must be from 4 through 15 seconds.")
+    if (
+        not math.isfinite(duration)
+        or duration < H3_MIN_DURATION_SECONDS
+        or duration > H3_MAX_NATIVE_DURATION_SECONDS + 1e-9
+    ):
+        raise ValueError(
+            "H3 target duration must be from 4 seconds through the native "
+            "362-frame/15.083-second endpoint."
+        )
     requested = max(H3_FRAME_OFFSET, math.ceil(duration * H3_FPS - 1e-9))
     return requested + (H3_FRAME_OFFSET - requested) % H3_FRAME_MODULUS
+
+
+def compatible_project_frame_count(frame_count: float, fps: int = H3_FPS) -> int:
+    """Validate a native frame selector, with legacy seconds-value migration."""
+
+    try:
+        project_fps = float(fps)
+    except (TypeError, ValueError) as error:
+        raise ValueError("Project FPS must be the native H3 rate of 24.") from error
+    if (
+        not math.isfinite(project_fps)
+        or not math.isclose(project_fps, H3_FPS, abs_tol=1e-9)
+        or isinstance(fps, bool)
+    ):
+        raise ValueError("Project FPS must be the native H3 rate of 24.")
+
+    value = float(frame_count)
+    if not math.isfinite(value):
+        raise ValueError("Project frame_count must be a finite number.")
+    # Workflows saved before the frame selector stored seconds in this widget
+    # position. Migrate that legacy 4–15.083 value to its former upward-aligned
+    # native frame count instead of corrupting the saved workflow on load.
+    if H3_MIN_DURATION_SECONDS <= value <= H3_MAX_NATIVE_DURATION_SECONDS + 0.0005:
+        return native_frame_count(value)
+    if not math.isclose(value, round(value), abs_tol=1e-9):
+        raise ValueError("Project frame_count must be a whole number.")
+    frames = int(round(value))
+    if (
+        frames < H3_MIN_NATIVE_FRAMES
+        or frames > H3_MAX_NATIVE_FRAMES
+        or frames % H3_FRAME_MODULUS != H3_FRAME_OFFSET
+    ):
+        raise ValueError(
+            "Project frame_count must be a native 17k+5 value from 107 through 362."
+        )
+    return frames
 
 
 def _copy_plan(plan: dict) -> dict:
@@ -266,17 +313,22 @@ def validated_plan(plan: Any, *, allowed_phases: set[str] | None = None) -> dict
         raise ValueError("h3_plan is missing its Project Setup data.")
     try:
         requested_duration = float(project["duration_seconds"])
+        fps = int(project.get("fps", H3_FPS))
         h3_length = int(project["h3_length"])
         effective_duration = float(project["effective_duration"])
     except (KeyError, TypeError, ValueError) as error:
         raise ValueError("h3_plan contains invalid Project duration data.") from error
+    if fps != H3_FPS:
+        raise ValueError("h3_plan must use MiniMax H3's native 24 FPS timeline.")
     expected_length = native_frame_count(requested_duration)
     if h3_length != expected_length or not math.isclose(
-        effective_duration, h3_length / H3_FPS, abs_tol=0.0005
+        effective_duration, h3_length / fps, abs_tol=0.0005
     ):
         raise ValueError("h3_plan contains stale native duration data.")
 
     normalized = dict(plan)
+    normalized["project"] = dict(project)
+    normalized["project"].setdefault("fps", H3_FPS)
     normalized.setdefault("target", {"task": TARGET_AV})
     normalized.setdefault("character_replacements", [])
     for key in (
@@ -323,18 +375,21 @@ def validated_plan(plan: Any, *, allowed_phases: set[str] | None = None) -> dict
 
 def _new_plan(
     initial_prompt: str,
-    duration_seconds: float,
+    frame_count: float,
     visual_style: str,
     overall_soundscape: str,
     non_diegetic_music: str,
+    fps: int = H3_FPS,
 ) -> dict:
-    h3_length = native_frame_count(duration_seconds)
+    h3_length = compatible_project_frame_count(frame_count, fps)
+    duration_seconds = h3_length / H3_FPS
     return {
         "version": PLAN_VERSION,
         "phase": PHASE_SETUP,
         "project": {
             "initial_prompt": _clean_block(initial_prompt),
             "duration_seconds": float(duration_seconds),
+            "fps": H3_FPS,
             "h3_length": h3_length,
             "effective_duration": h3_length / H3_FPS,
             "visual_style": _clean_inline(visual_style),
@@ -487,7 +542,6 @@ def _prepare_video_frames(video_frames: Any, source_fps: float, h3_length: int):
 def _prepare_foley_video_frames(
     video_frames: Any,
     source_fps: float,
-    requested_duration: float,
     h3_length: int,
 ):
     """Resample a locked picture track to H3's exact target frame grid."""
@@ -519,14 +573,13 @@ def _prepare_foley_video_frames(
         )
 
     resampled_count = max(1, math.ceil(source_duration * H3_FPS - 1e-9))
-    requested_count = max(1, math.ceil(float(requested_duration) * H3_FPS - 1e-9))
-    if not (
-        requested_count - 1 <= resampled_count <= requested_count + 1
-        or resampled_count == int(h3_length)
-    ):
+    source_native_count = native_frame_count(source_duration)
+    if source_native_count != int(h3_length) and resampled_count != int(h3_length):
         raise ValueError(
-            "Project duration must match the Foley source video. Set duration_seconds "
-            f"to about {source_duration:.3f}, or load the already aligned "
+            "Project frame_count must match the Foley source video's native alignment. "
+            f"This {source_duration:.3f}-second source aligns to {source_native_count} "
+            f"frames, while Project Setup selects {h3_length}; choose "
+            f"frame_count={source_native_count} or load an already aligned "
             f"{h3_length}-frame source batch."
         )
 
@@ -3264,11 +3317,11 @@ class MiniMaxH3PlanV2ProjectSetup:
     OUTPUT_TOOLTIPS = (
         "Connect to the first Plan v2 Image, Video, Audio, or Shot node.",
         "Native H3 target length on the required 17k+5 frame grid at 24 FPS.",
-        "Requested and effective timing plus the global audiovisual choices.",
+        "Selected frame count, derived duration, and global audiovisual choices.",
     )
     DESCRIPTION = (
-        "Starts the ordered Plan v2 workflow. It owns global intent and duration only; "
-        "references and Shots are added by following nodes."
+        "Starts the ordered Plan v2 workflow. It owns global intent and a native "
+        "17k+5 frame count at 24 FPS; references and Shots are added by following nodes."
     )
 
     @classmethod
@@ -3288,16 +3341,16 @@ class MiniMaxH3PlanV2ProjectSetup:
                         ),
                     },
                 ),
-                "duration_seconds": (
-                    "FLOAT",
+                "frame_count": (
+                    "INT",
                     {
-                        "default": 6.0,
-                        "min": 4.0,
-                        "max": 15.0,
-                        "step": 0.01,
+                        "default": 158,
+                        "min": H3_MIN_NATIVE_FRAMES,
+                        "max": H3_MAX_NATIVE_FRAMES,
+                        "step": H3_FRAME_MODULUS,
                         "tooltip": (
-                            "Authoritative requested duration. Prompt Merge reports the slightly "
-                            "adjusted native duration after upward 17k+5 alignment."
+                            "Authoritative native 17k+5 frame count. The badge and preview display "
+                            "its duration at the fixed Project FPS."
                         ),
                     },
                 ),
@@ -3332,29 +3385,40 @@ class MiniMaxH3PlanV2ProjectSetup:
                         "tooltip": "Audience-only score. Use N/A when none is requested.",
                     },
                 ),
+                "fps": (
+                    "INT",
+                    {
+                        "default": H3_FPS,
+                        "min": H3_FPS,
+                        "max": H3_FPS,
+                        "step": 1,
+                        "tooltip": "MiniMax H3 uses a fixed native timeline of 24 FPS.",
+                    },
+                ),
             }
         }
 
     def start(
         self,
         initial_prompt: str,
-        duration_seconds: float,
+        frame_count: float,
         visual_style: str,
         overall_soundscape: str,
         non_diegetic_music: str,
+        fps: int = H3_FPS,
     ):
         plan = _new_plan(
             initial_prompt,
-            duration_seconds,
+            frame_count,
             visual_style,
             overall_soundscape,
             non_diegetic_music,
+            fps,
         )
         project = plan["project"]
         preview = (
-            f"Project ready. Requested {project['duration_seconds']:.3f}s; native "
-            f"{project['h3_length']} frames at {H3_FPS} FPS = "
-            f"{project['effective_duration']:.3f}s.\n"
+            f"Project ready. {project['duration_seconds']:.3f}s · "
+            f"{project['h3_length']} native frames at {project['fps']} FPS.\n"
             f"Style: {project['visual_style'] or 'derive from intent/references'}\n"
             f"Soundscape: {project['overall_soundscape'] or 'not specified'}\n"
             f"Non-diegetic music: {project['non_diegetic_music']}"
@@ -3434,7 +3498,6 @@ class MiniMaxH3PlanV2FoleyTarget:
             _prepare_foley_video_frames(
                 video_frames,
                 source_fps,
-                project["duration_seconds"],
                 project["h3_length"],
             )
         )

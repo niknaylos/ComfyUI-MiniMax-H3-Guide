@@ -22,10 +22,11 @@
       "properties": {"Node name for S&R": "MiniMaxH3PlanV2ProjectSetup"},
       "widgets_values": [
         "Recreate the supplied source video's complete timeline while replacing only the selected performer with the supplied reference character from the first source-derived frame through the final frame. Preserve every other person, action, environment, prop, light, camera movement, cut, composition, spatial relationship, and synchronized source sound. The character picture supplies identity and appearance only; never animate it or use it as an opening frame, composition, or separate shot.",
-        6.0,
+        158,
         "cinematic, live-action matching the source video",
         "N/A",
-        "N/A"
+        "N/A",
+        24
       ]
     },
     {

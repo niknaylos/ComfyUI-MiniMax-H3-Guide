@@ -17,6 +17,12 @@ const ENHANCER = "MiniMaxH3PlanV2PromptEnhancer";
 const APPLY_REFERENCE = "MiniMaxH3PlanV2ApplyReferencePlan";
 const PROMPT_OVERRIDE = "MiniMaxH3PlanV2PromptOverride";
 const PROMPT_REVIEW = "MiniMaxH3PlanV2PromptReview";
+const H3_FPS = 24;
+const H3_FRAME_MODULUS = 17;
+const H3_FRAME_OFFSET = 5;
+const H3_MIN_NATIVE_FRAMES = 107;
+const H3_MAX_NATIVE_FRAMES = 362;
+const H3_MAX_NATIVE_DURATION = H3_MAX_NATIVE_FRAMES / H3_FPS;
 
 const PLAN_CLASSES = new Set([
     PROJECT,
@@ -436,14 +442,47 @@ function buildCatalog(chain) {
     };
 }
 
-function nativeFrameCount(duration) {
-    const requested = Math.max(5, Math.ceil(Number(duration) * 24 - 1e-9));
-    return requested + ((5 - requested) % 17 + 17) % 17;
+function nativeFrameCount(duration, fps = H3_FPS) {
+    const requested = Math.max(
+        H3_FRAME_OFFSET,
+        Math.ceil(Number(duration) * fps - 1e-9)
+    );
+    return (
+        requested +
+        ((H3_FRAME_OFFSET - requested) % H3_FRAME_MODULUS + H3_FRAME_MODULUS) %
+            H3_FRAME_MODULUS
+    );
+}
+
+function projectFps(project) {
+    return Number(widget(project, "fps")?.value || H3_FPS);
+}
+
+function compatibleFrameCount(value) {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) return 158;
+    // Migrate workflows saved when this widget position contained seconds.
+    if (numeric >= 4 && numeric <= H3_MAX_NATIVE_DURATION + 0.0005) {
+        return Math.min(H3_MAX_NATIVE_FRAMES, nativeFrameCount(numeric));
+    }
+    const requested = Math.max(H3_MIN_NATIVE_FRAMES, Math.ceil(numeric));
+    const aligned =
+        requested +
+        ((H3_FRAME_OFFSET - requested) % H3_FRAME_MODULUS + H3_FRAME_MODULUS) %
+            H3_FRAME_MODULUS;
+    return Math.min(H3_MAX_NATIVE_FRAMES, aligned);
+}
+
+function projectFrameCount(project) {
+    const frames = widget(project, "frame_count");
+    if (frames) return compatibleFrameCount(frames.value);
+    // Read badges correctly until a pre-migration node has been reconfigured.
+    const requested = Number(widget(project, "duration_seconds")?.value || 6);
+    return Math.min(H3_MAX_NATIVE_FRAMES, nativeFrameCount(requested));
 }
 
 function effectiveDuration(catalog) {
-    const requested = Number(widget(catalog.project, "duration_seconds")?.value || 6);
-    return nativeFrameCount(requested) / 24;
+    return projectFrameCount(catalog.project) / projectFps(catalog.project);
 }
 
 function scopeSyntax(value, shotCount) {
@@ -818,6 +857,37 @@ function installWidgetCallbacks(node) {
     }
 }
 
+function installProjectFrameSelector(node) {
+    const frames = widget(node, "frame_count");
+    const fps = widget(node, "fps");
+    if (!frames || frames.__h3ProjectFrameSelector) return;
+
+    const normalize = () => {
+        const normalized = compatibleFrameCount(frames.value);
+        if (frames.value !== normalized) {
+            frames.value = normalized;
+            if (frames.inputEl) frames.inputEl.value = normalized;
+        }
+        if (fps && fps.value !== H3_FPS) {
+            fps.value = H3_FPS;
+            if (fps.inputEl) fps.inputEl.value = H3_FPS;
+        }
+    };
+
+    for (const target of [frames, fps].filter(Boolean)) {
+        const original = target.callback;
+        target.callback = function () {
+            const result = original?.apply(this, arguments);
+            normalize();
+            scheduleRefresh();
+            return result;
+        };
+        target.__h3PlanV2Callback = true;
+    }
+    frames.__h3ProjectFrameSelector = true;
+    normalize();
+}
+
 function resizeNode(node) {
     if (!node?.computeSize || !node?.setSize) return;
     // The prompt review extension owns a freely resizable, fill-height DOM
@@ -895,6 +965,7 @@ function setupNode(node) {
     if (type === SHOT && !output(node, "shot_handle")) {
         node.addOutput?.("shot_handle", "MINIMAX_H3_SHOT_HANDLE_V2");
     }
+    if (type === PROJECT) installProjectFrameSelector(node);
     if (node.__h3PlanV2Setup) {
         installWidgetCallbacks(node);
         return;
@@ -1098,26 +1169,24 @@ function refreshBadgeAndOutputs(node, catalog) {
         text = "Bypassed · labels recompute downstream";
         color = COLORS.bypass;
     } else if (type === PROJECT) {
-        const requested = Number(widget(node, "duration_seconds")?.value || 6);
-        const frames = nativeFrameCount(requested);
+        const fps = projectFps(node);
+        const frames = projectFrameCount(node);
         text =
-            requested.toFixed(3) +
-            "s requested · " +
             frames +
             "f · " +
-            (frames / 24).toFixed(3) +
-            "s native";
+            (frames / fps).toFixed(3) +
+            "s at " +
+            fps +
+            " FPS";
         color = COLORS.ready;
     } else if (type === FOLEY) {
-        const requested = Number(
-            widget(catalog.project, "duration_seconds")?.value || 6
-        );
-        const frames = nativeFrameCount(requested);
+        const fps = projectFps(catalog.project);
+        const frames = projectFrameCount(catalog.project);
         text =
             "Foley · video mask 0 · audio mask 1 · " +
             frames +
             "f / " +
-            (frames / 24).toFixed(3) +
+            (frames / fps).toFixed(3) +
             "s";
         setOutputLabel(node, "h3_video", "locked picture track");
         color = catalog.endpointConflict ? COLORS.error : COLORS.ready;
