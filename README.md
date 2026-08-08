@@ -343,20 +343,27 @@ Ready-to-open examples live in `example_workflows/` and appear in ComfyUI's
 workflow template browser. The text-only prompt builder is preconfigured for
 APP mode; reference starters keep their semantic spine visible so files, roles,
 Shots, and dialogue can be inspected before generation. The identity-and-voice
-example also includes the current official Ref2VA model, sampler, joint video/
+example also includes the current Ref2VA model, sampler, joint video/
 audio decode, and Save Video path, with Apply Reference Plan replacing manual
 reference-socket wiring. It places Prompt Review Gate directly before Apply
 Reference Plan to demonstrate the prompt-only pause while all media stays in
 `plan_context`.
+
+**Workflow status:** `MiniMax H3 Plan v2 - Animate Keyframe with Motion
+Reference.json` is the finished reference preset. Every other example is visibly
+marked **WIP** on its Project node and first canvas group while its task-specific
+media path and defaults are refined. The WIP generation examples already share
+the finished preset's resolution, model optimization, preview, sampling, joint
+decode, and save layout; the prompt-builder APP intentionally remains prompt-only.
 
 `MiniMax H3 Plan v2 - Video to Audio Foley.json` is the audio-generation
 starter. It loads one video, carries its decoded frames through Foley Target,
 compiles a sound-oriented Shot timeline, and feeds the automatically masked AV
 latent into Apply Reference Plan. Match Apply Reference Plan's width and height
 to the source aspect ratio to avoid stretching; the node handles the exact
-pixel resize and H3 frame-grid padding. The starter intentionally stops at the
-conditioning/latent handoff so it can be connected to the sampler and decode
-tail appropriate to the installed H3 build.
+pixel resize and H3 frame-grid padding. The WIP includes the FL2VA loader,
+required per-row mask patch, sampler, joint video/audio decode, and Save Video
+tail so the locked picture track and generated Foley audio remain synchronized.
 
 `MiniMax H3 Plan v2 - Video to Audio Foley with Sound Reference.json` adds a
 clean footstep clip as a standalone `Sound-effect texture` reference. It shows
@@ -367,8 +374,17 @@ timing tied to the source video. Because this is Ref2VA conditioning, the
 example also connects the MiniMax H3 audio VAE and should be sampled with the
 Ref2VA checkpoint family.
 
-`MiniMax H3 Plan v2 - Character Replacement.json` is the complete replacement-
-only generation preset. Set Project duration to the source video's duration,
+`MiniMax H3 Plan v2 - Video to Audio Foley with Multiple Sound and Voice
+References.json` is the WIP multi-reference variant. It derives an on-screen
+Subject from the locked source frame, uses two independent sound-effect texture
+references for footsteps and secondary contact detail, and binds a third audio
+reference to that Subject's voice for one explicit Dialogue Event. Its PDD/LoRA
+sampling path is retained from the working graph. The resized source frames are
+muxed directly with the generated audio, so the final picture track stays
+source-derived and no unused video decode branch is present.
+
+`MiniMax H3 Plan v2 - Character Replacement.json` is the WIP replacement-only
+generation preset. Set Project duration to the source video's duration,
 load the replacement identity image and a 2–15 second source video with audio,
 then identify exactly one source performer in Character Replacement. The image
 is routed as identity-only evidence, the video supplies the complete timeline,
@@ -385,8 +401,8 @@ VAEs, sampling, joint decode, and Save Video without manual reference wiring.
 shot-composition chain directly: five Shots, one loaded keyframe attached to
 each Shot as its opening frame, and one optional motion clip whose reusable
 action Subject is transferred to the established identity Subject only in Shot
-3. Replace the placeholder media and prose, then extend Prompt Merge into the
-enhancer/review/native generation tail when desired.
+3. Replace the placeholder media and prose, then review the compiled plan before
+the included Ref2VA generation, joint decode, and Save Video tail.
 
 `MiniMax H3 Plan v2 - Animate Keyframe with Motion Reference.json` is the
 complete one-Shot generation preset for retargeting a motion clip onto a supplied
@@ -397,7 +413,7 @@ uses Ref2VA rather than exact endpoint conditioning so all three roles can coexi
 in one native call. Prompt Merge is set to the compact low-token style and feeds
 Prompt Review, Apply Reference Plan, sampling, joint decode, and Save Video.
 
-`MiniMax H3 Plan v2 - Video Extension with Audio Continuity.json` is a complete
+`MiniMax H3 Plan v2 - Video Extension with Audio Continuity.json` is a WIP
 one-pass character-transfer continuation example. Load a replacement-character
 image and one 2–10 second source video with audio. The image defines the
 replacement Subject; the video is registered as `Source video to continue`; and

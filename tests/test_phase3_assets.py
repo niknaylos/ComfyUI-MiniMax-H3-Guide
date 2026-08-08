@@ -35,6 +35,7 @@ def test_phase3_workflow_templates_have_consistent_graph_links():
         "MiniMax H3 Plan v2 - Identity and Voice.json",
         "MiniMax H3 Plan v2 - Prompt Builder App.json",
         "MiniMax H3 Plan v2 - Video to Audio Foley.json",
+        "MiniMax H3 Plan v2 - Video to Audio Foley with Multiple Sound and Voice References.json",
         "MiniMax H3 Plan v2 - Video to Audio Foley with Sound Reference.json",
         "MiniMax H3 Plan v2 - Video Extension with Audio Continuity.json",
     }
@@ -238,6 +239,98 @@ def test_templates_use_exact_roles_and_compiled_plan_v2_chain():
         )
 
 
+def test_workflow_status_and_model_layout_follow_finished_reference():
+    workflows = _workflows()
+    finished_name = "MiniMax H3 Plan v2 - Animate Keyframe with Motion Reference.json"
+    prompt_app_name = "MiniMax H3 Plan v2 - Prompt Builder App.json"
+
+    assert workflows[finished_name]["extra"]["workflowStatus"] == "finished"
+    assert "WIP" not in workflows[finished_name]["groups"][0]["title"]
+
+    for name, workflow in workflows.items():
+        serialized = json.dumps(workflow).casefold()
+        assert "nsfw" not in serialized
+        assert "blowjob" not in serialized
+        assert "penis" not in serialized
+        assert "pussy" not in serialized
+        if name == finished_name:
+            continue
+        assert workflow["extra"]["workflowStatus"] == "WIP"
+        project = next(
+            node
+            for node in workflow["nodes"]
+            if node["type"] == "MiniMaxH3PlanV2ProjectSetup"
+        )
+        assert project["title"].startswith("WIP —")
+        assert workflow["groups"][0]["title"].startswith("WIP —")
+
+    common_generation_types = {
+        "ResolutionSelector",
+        "LegacyWidgetWidthFix",
+        "PathchSageAttentionKJ",
+        "MiniMaxH3BlockCacheT8",
+        "ModelPreviewOverrideKJ",
+        "MiniMaxH3PlanV2PromptReview",
+        "MiniMaxH3PlanV2ApplyReferencePlan",
+        "SamplerCustomAdvanced",
+        "VAEDecodeAudio",
+        "CreateVideo",
+        "SaveVideo",
+    }
+    for name, workflow in workflows.items():
+        types = {node["type"] for node in workflow["nodes"]}
+        if name == prompt_app_name:
+            assert types.isdisjoint(common_generation_types)
+        else:
+            assert common_generation_types <= types
+
+    direct_picture_mux_name = (
+        "MiniMax H3 Plan v2 - Video to Audio Foley with Multiple Sound and Voice References.json"
+    )
+    for name, workflow in workflows.items():
+        types = {node["type"] for node in workflow["nodes"]}
+        if name in {prompt_app_name, direct_picture_mux_name}:
+            assert "VAEDecode" not in types
+        else:
+            assert "VAEDecode" in types
+
+    fl2va_names = {
+        "MiniMax H3 Plan v2 - First and Last Frames.json",
+        "MiniMax H3 Plan v2 - Video to Audio Foley.json",
+    }
+    for name, workflow in workflows.items():
+        model_nodes = [
+            node for node in workflow["nodes"] if node["type"] == "UNETLoader"
+        ]
+        if name == prompt_app_name:
+            assert not model_nodes
+            continue
+        model_name = model_nodes[0]["widgets_values"][0]
+        expected_family = "fl2va" if name in fl2va_names else "ref2va"
+        assert expected_family in model_name.casefold()
+
+    for name, workflow in workflows.items():
+        types = [node["type"] for node in workflow["nodes"]]
+        if "Video to Audio Foley" in name:
+            assert types.count("MiniMaxH3PerRowMaskPatch") == 1
+            assert types.count("ImageResizeKJv2") == 1
+        else:
+            assert "MiniMaxH3PerRowMaskPatch" not in types
+
+    motion_names = {
+        finished_name,
+        "MiniMax H3 Plan v2 - Five Shot Keyframe Composition.json",
+    }
+    for name, workflow in workflows.items():
+        types = {node["type"] for node in workflow["nodes"]}
+        if name in motion_names:
+            assert "TEEDPreprocessor" in types
+            assert "ImageResizeKJv2" in types
+        elif "Video to Audio Foley" not in name:
+            assert "TEEDPreprocessor" not in types
+            assert "ImageResizeKJv2" not in types
+
+
 def test_prompt_builder_app_exposes_only_real_widget_names():
     workflow = _workflows()["MiniMax H3 Plan v2 - Prompt Builder App.json"]
     assert workflow["extra"]["linearMode"] is True
@@ -309,6 +402,98 @@ def test_character_replacement_template_compiles_with_placeholder_media():
     assert "Plan ready: 0 errors" in report
 
 
+def test_endpoint_identity_voice_and_prompt_app_templates_compile():
+    workflows = _workflows()
+
+    endpoint_nodes = {
+        node["id"]: node
+        for node in workflows["MiniMax H3 Plan v2 - First and Last Frames.json"][
+            "nodes"
+        ]
+    }
+    endpoint_plan = plan_v2.MiniMaxH3PlanV2ProjectSetup().start(
+        *endpoint_nodes[1]["widgets_values"]
+    )[0]
+    endpoint_plan = plan_v2.MiniMaxH3PlanV2ImageReference().add_image(
+        endpoint_plan,
+        torch.zeros(1, 48, 64, 3),
+        *endpoint_nodes[3]["widgets_values"],
+    )[0]
+    endpoint_plan = plan_v2.MiniMaxH3PlanV2ImageReference().add_image(
+        endpoint_plan,
+        torch.zeros(1, 48, 64, 3),
+        *endpoint_nodes[5]["widgets_values"],
+    )[0]
+    endpoint_plan = plan_v2.MiniMaxH3PlanV2Shot().add_shot(
+        endpoint_plan, *endpoint_nodes[6]["widgets_values"]
+    )[0]
+    _prompt, _rewrite, endpoint_context, endpoint_report, _length = (
+        plan_v2.MiniMaxH3PlanV2PromptMerge().merge(
+            endpoint_plan, *endpoint_nodes[7]["widgets_values"]
+        )
+    )
+    assert endpoint_context["compiled"]["mode"] == "FL2VA"
+    assert [route["route"] for route in endpoint_context["compiled"]["routes"]] == [
+        "first_frame",
+        "last_frame",
+    ]
+    assert "Plan ready: 0 errors" in endpoint_report
+
+    identity_nodes = {
+        node["id"]: node
+        for node in workflows["MiniMax H3 Plan v2 - Identity and Voice.json"]["nodes"]
+    }
+    identity_plan = plan_v2.MiniMaxH3PlanV2ProjectSetup().start(
+        *identity_nodes[1]["widgets_values"]
+    )[0]
+    identity_plan = plan_v2.MiniMaxH3PlanV2ImageReference().add_image(
+        identity_plan,
+        torch.zeros(1, 48, 64, 3),
+        *identity_nodes[3]["widgets_values"],
+    )[0]
+    identity_plan = plan_v2.MiniMaxH3PlanV2AudioReference().add_audio(
+        identity_plan,
+        {"waveform": torch.zeros(1, 1, 96_000), "sample_rate": 32_000},
+        *identity_nodes[5]["widgets_values"],
+    )[0]
+    identity_plan = plan_v2.MiniMaxH3PlanV2Shot().add_shot(
+        identity_plan, *identity_nodes[6]["widgets_values"]
+    )[0]
+    identity_plan = plan_v2.MiniMaxH3PlanV2DialogueEvent().add_dialogue(
+        identity_plan, *identity_nodes[7]["widgets_values"]
+    )[0]
+    _prompt, _rewrite, identity_context, identity_report, _length = (
+        plan_v2.MiniMaxH3PlanV2PromptMerge().merge(
+            identity_plan, *identity_nodes[8]["widgets_values"]
+        )
+    )
+    assert identity_context["compiled"]["mode"] == "Ref2VA"
+    assert [route["route"] for route in identity_context["compiled"]["routes"]] == [
+        "ref_image_0",
+        "ref_audio_0",
+    ]
+    assert "Plan ready: 0 errors" in identity_report
+
+    app_nodes = {
+        node["id"]: node
+        for node in workflows["MiniMax H3 Plan v2 - Prompt Builder App.json"]["nodes"]
+    }
+    app_plan = plan_v2.MiniMaxH3PlanV2ProjectSetup().start(
+        *app_nodes[1]["widgets_values"]
+    )[0]
+    app_plan = plan_v2.MiniMaxH3PlanV2Shot().add_shot(
+        app_plan, *app_nodes[2]["widgets_values"]
+    )[0]
+    app_prompt, _rewrite, app_context, app_report, _length = (
+        plan_v2.MiniMaxH3PlanV2PromptMerge().merge(
+            app_plan, *app_nodes[3]["widgets_values"]
+        )
+    )
+    assert app_context["compiled"]["mode"] == "T2VA"
+    assert "[Shot 1]" in app_prompt
+    assert "Plan ready: 0 errors" in app_report
+
+
 def test_foley_template_compiles_locked_video_without_reference_route():
     workflow = _workflows()["MiniMax H3 Plan v2 - Video to Audio Foley.json"]
     nodes = {node["id"]: node for node in workflow["nodes"]}
@@ -373,6 +558,62 @@ def test_foley_sound_reference_template_compiles_ref2va_audio_only_route():
     assert "Sound-effect texture" not in prompt
     assert "sound-effect texture reference" in prompt
     assert "video mask = 0" in report and "audio mask = 1" in report
+
+
+def test_multi_reference_foley_template_compiles_image_sound_and_voice_routes():
+    workflow = _workflows()[
+        "MiniMax H3 Plan v2 - Video to Audio Foley with Multiple Sound and Voice References.json"
+    ]
+    nodes = {node["id"]: node for node in workflow["nodes"]}
+
+    plan = plan_v2.MiniMaxH3PlanV2ProjectSetup().start(
+        *nodes[1]["widgets_values"]
+    )[0]
+    plan = plan_v2.MiniMaxH3PlanV2FoleyTarget().set_foley_target(
+        plan,
+        torch.zeros(362, 48, 64, 3),
+        *nodes[3]["widgets_values"],
+    )[0]
+    plan = plan_v2.MiniMaxH3PlanV2ImageReference().add_image(
+        plan,
+        torch.zeros(1, 48, 64, 3),
+        *nodes[49]["widgets_values"],
+    )[0]
+    reference_audio = {
+        "waveform": torch.zeros(1, 1, 96000),
+        "sample_rate": 48000,
+    }
+    for node_id in (5, 43, 46):
+        plan = plan_v2.MiniMaxH3PlanV2AudioReference().add_audio(
+            plan,
+            reference_audio,
+            *nodes[node_id]["widgets_values"],
+        )[0]
+    plan = plan_v2.MiniMaxH3PlanV2Shot().add_shot(
+        plan,
+        *nodes[6]["widgets_values"],
+    )[0]
+    plan = plan_v2.MiniMaxH3PlanV2DialogueEvent().add_dialogue(
+        plan,
+        *nodes[47]["widgets_values"],
+    )[0]
+    prompt, _rewrite, context, report, _length = (
+        plan_v2.MiniMaxH3PlanV2PromptMerge().merge(
+            plan,
+            *nodes[7]["widgets_values"],
+        )
+    )
+
+    assert context["compiled"]["mode"] == "Ref2VA"
+    assert [entry["route"] for entry in context["compiled"]["routes"]] == [
+        "ref_image_0",
+        "ref_audio_0",
+        "ref_audio_1",
+        "ref_audio_2",
+    ]
+    assert all(token in prompt for token in ("<Audio 1>", "<Audio 2>", "<Audio 3>"))
+    assert "That worked better than expected." in prompt
+    assert "Plan ready: 0 errors" in report
 
 
 def test_five_shot_composition_template_compiles_automatic_media_scopes():
@@ -452,6 +693,11 @@ def test_keyframe_motion_template_compiles_distinct_identity_composition_and_mot
         torch.zeros(1, 48, 64, 3),
         *nodes[3]["widgets_values"],
     )[0]
+    plan = plan_v2.MiniMaxH3PlanV2AudioReference().add_audio(
+        plan,
+        {"waveform": torch.zeros(1, 1, 192_000), "sample_rate": 32_000},
+        *nodes[42]["widgets_values"],
+    )[0]
     plan, _preview, shot_handle = plan_v2.MiniMaxH3PlanV2Shot().add_shot(
         plan,
         *nodes[4]["widgets_values"],
@@ -485,9 +731,11 @@ def test_keyframe_motion_template_compiles_distinct_identity_composition_and_mot
         "ref_image_0",
         "ref_image_1",
         "ref_video_0",
+        "ref_audio_0",
     ]
-    assert context["assets"][1]["relationship"] == plan_v2.IMAGE_KEYFRAME
-    assert context["assets"][2]["relationship"] == plan_v2.VIDEO_MOTION
+    assert context["assets"][1]["relationship"] == plan_v2.AUDIO_COPY_COMPLETE
+    assert context["assets"][2]["relationship"] == plan_v2.IMAGE_KEYFRAME
+    assert context["assets"][3]["relationship"] == plan_v2.VIDEO_MOTION
     assert "<Subject 2> is the reusable pose, action, and motion from <Video 1>" in prompt
     assert "Plan ready: 0 errors" in report
 
