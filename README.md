@@ -33,7 +33,11 @@ the next cut or Project duration computes its end and the Shot also returns a
 stable `shot_handle`. Attach Keyframe and Attach Motion consume that handle and
 assign their media to exactly that Shot without a numeric `shot_scope` field.
 Their forwarded Plan and Shot handle allow multiple attachments before the next
-Shot. Dialogue Events attach to the most recently opened Shot, allowing Prompt
+Shot. A Shot description is normally typed in the node's own editor, but the
+optional `description_text` input accepts that prose from any upstream STRING
+node and replaces the widget while it stays connected; connected text obeys the
+same label, `<Audio N>`, and `[d]` rules.
+Dialogue Events attach to the most recently opened Shot, allowing Prompt
 Merge to assign S1, S2, and later speaker IDs from actual vocal-event order.
 Each Dialogue Event can optionally set `start_offset_seconds`: `-1` leaves its
 placement automatic, `0` starts at the Shot opening, and a positive value starts

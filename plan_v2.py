@@ -4680,7 +4680,23 @@ class MiniMaxH3PlanV2Shot:
                         "tooltip": "How this Shot begins. Shot 1 ignores this value.",
                     },
                 ),
-            }
+            },
+            "optional": {
+                "description_text": (
+                    "STRING",
+                    {
+                        "forceInput": True,
+                        "multiline": True,
+                        "dynamicPrompts": False,
+                        "tooltip": (
+                            "Optional upstream text that replaces the description widget for "
+                            "this Shot. Connected text follows the same rules: reference "
+                            "labels, inline <Audio N> placement, and [d] dialogue markers are "
+                            "read from it, and raw H3 <d> tags are still rejected."
+                        ),
+                    },
+                )
+            },
         }
 
     def add_shot(
@@ -4690,14 +4706,18 @@ class MiniMaxH3PlanV2Shot:
         description: str,
         camera_direction: str,
         transition: str,
+        description_text=None,
     ):
         plan = validated_plan(
             h3_plan,
             allowed_phases={PHASE_SETUP, PHASE_TIMELINE},
         )
-        description_text = _clean_block(description)
+        description_text = _clean_block(description_text) or _clean_block(description)
         if not description_text:
-            raise ValueError("Every explicit H3 Shot needs a description.")
+            raise ValueError(
+                "Every explicit H3 Shot needs a description from its widget or from a "
+                "connected description_text input."
+            )
         if "<d>" in description_text.casefold() or "</d>" in description_text.casefold():
             raise ValueError(
                 "Do not write raw H3 <d> tags in a Shot description. Insert [d] as the "

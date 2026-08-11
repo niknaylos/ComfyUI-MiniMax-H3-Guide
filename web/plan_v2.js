@@ -47,6 +47,11 @@ const UI_CLASSES = new Set([
     APPLY_REFERENCE,
 ]);
 
+const SHOT_EDITOR_HINT =
+    "Shot description · type < for Subject/media tags; place <Audio N> in its sound sentence; place [d] where the next Dialogue Event must appear";
+const SHOT_EDITOR_DRIVEN_HINT =
+    "Shot description supplied by the connected description_text input · the text below is ignored";
+
 const UNASSIGNED_IMAGE_USE = "Choose an image relationship";
 const IMAGE_DEFINE_VISIBLE = "Define reusable visible content";
 const IMAGE_FIRST_FRAME = "Exact first frame";
@@ -677,7 +682,7 @@ function createShotEditor(node) {
         "font-size:11px",
     ].join(";");
     const hint = document.createElement("div");
-    hint.textContent = "Shot description · type < for Subject/media tags; place <Audio N> in its sound sentence; place [d] where the next Dialogue Event must appear";
+    hint.textContent = SHOT_EDITOR_HINT;
     const editor = document.createElement("textarea");
     editor.value = String(hidden.value || "");
     editor.rows = 6;
@@ -713,6 +718,7 @@ function createShotEditor(node) {
     const state = {
         hidden,
         root,
+        hint,
         editor,
         menu,
         domWidget,
@@ -834,11 +840,15 @@ function createShotEditor(node) {
     return state;
 }
 
-function refreshShotEditor(shotEditor, catalog) {
+function refreshShotEditor(shotEditor, catalog, driven) {
     if (!shotEditor) return;
     setWidgetVisible(shotEditor.hidden, false);
     setWidgetVisible(shotEditor.domWidget, true);
     shotEditor.suggestions = labelSuggestions(catalog);
+    shotEditor.hint.textContent = driven ? SHOT_EDITOR_DRIVEN_HINT : SHOT_EDITOR_HINT;
+    shotEditor.hint.style.color = driven ? "#c9a227" : "";
+    shotEditor.editor.disabled = Boolean(driven);
+    shotEditor.editor.style.opacity = driven ? "0.4" : "";
     if (document.activeElement !== shotEditor.editor) {
         shotEditor.editor.value = String(shotEditor.hidden.value || "");
     }
@@ -959,11 +969,14 @@ function referenceBadge(node, catalog) {
 
 function setupNode(node) {
     const type = className(node);
-    // Workflows saved before Shot handles existed may restore their serialized
-    // two-output layout. Add only the missing typed output so they can use the
-    // new attachment chain without recreating every Shot node.
+    // Workflows saved before Shot handles and the description socket existed restore
+    // their older serialized slot layout. Add only what is missing so they reach the
+    // attachment chain and upstream text without recreating every Shot node.
     if (type === SHOT && !output(node, "shot_handle")) {
         node.addOutput?.("shot_handle", "MINIMAX_H3_SHOT_HANDLE_V2");
+    }
+    if (type === SHOT && !input(node, "description_text")) {
+        node.addInput?.("description_text", "STRING");
     }
     if (type === PROJECT) installProjectFrameSelector(node);
     if (node.__h3PlanV2Setup) {
@@ -1135,7 +1148,11 @@ function refreshConditionalWidgets(node, catalog) {
         if (first && cut) cut.value = 0;
         setWidgetVisible(cut, !first);
         setWidgetVisible(widget(node, "transition"), !first);
-        refreshShotEditor(node.__h3ShotEditor, catalog);
+        refreshShotEditor(
+            node.__h3ShotEditor,
+            catalog,
+            input(node, "description_text")?.link != null
+        );
     } else if (type === ENHANCER) {
         const analyze =
             clean(widget(node, "visual_analysis")?.value) === VISUAL_ANALYSIS_ENABLED;

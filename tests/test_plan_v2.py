@@ -905,6 +905,58 @@ def test_shot_rejects_raw_h3_dialogue_tags_in_favor_of_placeholder():
         shot(project(), 0.0, "A narrator says <d>[English] Hello.</d>")
 
 
+def test_connected_description_text_fills_the_shot_and_replaces_the_widget():
+    plan = MiniMaxH3PlanV2Shot().add_shot(
+        project(),
+        0.0,
+        "Widget text that must be ignored.",
+        "",
+        "Direct cut",
+        description_text="A courier sets a parcel on the counter.",
+    )[0]
+
+    assert plan["shots"][0]["description"] == "A courier sets a parcel on the counter."
+    prompt, _rewrite, _report, _compiled, _length = compile_h3_plan(plan)
+    assert "A courier sets a parcel on the counter." in prompt
+    assert "must be ignored" not in prompt
+
+
+def test_shot_falls_back_to_the_widget_when_no_description_text_is_connected():
+    plan = MiniMaxH3PlanV2Shot().add_shot(
+        project(),
+        0.0,
+        "The widget still owns this Shot.",
+        "",
+        "Direct cut",
+    )[0]
+
+    assert plan["shots"][0]["description"] == "The widget still owns this Shot."
+
+
+def test_shot_needs_a_description_from_the_widget_or_the_connected_input():
+    with pytest.raises(ValueError, match="widget or from a connected description_text"):
+        MiniMaxH3PlanV2Shot().add_shot(
+            project(),
+            0.0,
+            "   ",
+            "",
+            "Direct cut",
+            description_text="   ",
+        )
+
+
+def test_connected_description_text_still_rejects_raw_h3_dialogue_tags():
+    with pytest.raises(ValueError, match=r"raw H3 <d> tags.*\[d\]"):
+        MiniMaxH3PlanV2Shot().add_shot(
+            project(),
+            0.0,
+            "",
+            "",
+            "Direct cut",
+            description_text="A narrator says <d>[English] Hello.</d>",
+        )
+
+
 def test_dialogue_start_offset_must_fall_inside_its_shot():
     plan = project()
     plan, _handle, _image, _preview = image_reference(plan, scope="1-2")
@@ -1972,6 +2024,11 @@ def test_node_contract_exposes_the_complete_phase_one_chain():
     assert list(MiniMaxH3PlanV2AudioReference.INPUT_TYPES()["optional"]) == [
         "paired_video"
     ]
+    shot_description_text = MiniMaxH3PlanV2Shot.INPUT_TYPES()["optional"][
+        "description_text"
+    ]
+    assert shot_description_text[0] == "STRING"
+    assert shot_description_text[1]["forceInput"] is True
     assert MiniMaxH3PlanV2PromptMerge.RETURN_NAMES == (
         "h3_prompt",
         "rewrite_request",
